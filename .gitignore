@@ -1,0 +1,8 @@
+.settings
+.class
+target
+work
+.tmp*
+.DS_Store
+*.iml
+.idea

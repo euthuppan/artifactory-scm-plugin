@@ -1,0 +1,23 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
+    <f:entry title="Clear workspace before copying" help="/plugin/ArchiveFilesSCM/clear.html" field="clearWorkspace">
+        <f:checkbox default="true"/>
+    </f:entry>
+    <f:entry title="URL" help="/plugin/ArchiveFilesSCM/url.html" field="url">
+        <f:textbox default="https://urlTo/ArchiveFile.zip/" />
+    </f:entry>
+
+    <!-- Important note! I NEEDED to install the cloudbees-credentials plugin v3.3 in order for this <c:select/> xml tag to be available! -->
+    <f:entry title="Credentials" field="credentialsId">
+        <c:select/>
+    </f:entry>
+
+    <!--
+                <f:entry>
+                    <div align="right">
+                        <input type="button" value="Add more" class="repeatable-add show-if-last"/>
+                        <input type="button" value="Delete" class="repeatable-delete show-if-not-only" style="margin-left: 1em;"/>
+                    </div>
+                </f:entry>
+    -->
+</j:jelly>
