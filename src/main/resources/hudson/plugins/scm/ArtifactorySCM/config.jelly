@@ -12,7 +12,7 @@
         <f:textbox default="https://urlTo/ArtifactoryURL_Repo_Folder/" />
     </f:entry>
 
-    <f:entry title="LatestVersionTag" help="/plugin/ArtifactorySCM/versioning.html" field="latestVersionTag">
+    <f:entry title="Get Latest Artifact with this Tag (Optional)" help="/plugin/ArtifactorySCM/versioning.html" field="latestVersionTag">
         <f:textbox default="" />
     </f:entry>
 
