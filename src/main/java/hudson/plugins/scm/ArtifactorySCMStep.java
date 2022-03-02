@@ -7,17 +7,19 @@ import org.kohsuke.stapler.export.Exported;
 
 import javax.annotation.Nonnull;
 
-public class ArchiveFilesSCMStep extends SCMStep {
+public class ArtifactorySCMStep extends SCMStep {
 
     private String url;
+    private String latestVersionTag;
 
     /** The clear workspace. */
     private boolean clearWorkspace;
+    //private boolean useCache;
 
     private String credentialsId;
 
     @DataBoundConstructor
-    public ArchiveFilesSCMStep() {
+    public ArtifactorySCMStep() {
     }
 
     @DataBoundSetter
@@ -40,6 +42,18 @@ public class ArchiveFilesSCMStep extends SCMStep {
         return clearWorkspace;
     }
 
+    /*
+    @DataBoundSetter
+    public void setUseCache(boolean useCache) {
+        this.useCache = useCache;
+    }
+
+    @Exported
+    public boolean isUseCache() {
+        return useCache;
+    }
+     */
+
     @DataBoundSetter
     public void setCredentialsId(String credentialsId) {
         this.credentialsId = credentialsId;
@@ -50,10 +64,20 @@ public class ArchiveFilesSCMStep extends SCMStep {
         return credentialsId;
     }
 
+    @DataBoundSetter
+    public void setLatestVersionTag(String latestVersionTag) {
+        this.latestVersionTag = latestVersionTag;
+    }
+
+    @Exported
+    public String getLatestVersionTag() {
+        return latestVersionTag;
+    }
+
     @Nonnull
     @Override
     protected SCM createSCM() {
-        return new ArchiveFilesSCM(url, clearWorkspace, credentialsId);
+        return new ArtifactorySCM(url, latestVersionTag, clearWorkspace, credentialsId);
     }
 
 }

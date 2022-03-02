@@ -1,12 +1,12 @@
 <?jelly escape-by-default='true'?>
 <div>
-    ArchiveFilesSCM plugin for Jenkins checkouts archive files and extracts to Jenkins job workspace
+    ArtifactorySCM plugin for Jenkins checkouts Artifactory files and extracts to Jenkins job workspace
     <br/>
     
     <h3>Plugin</h3>
     <ul>
         <li>
-            checkouts archive file only when last modified date(last-modified header returned when connecting to a URL) changes from last checkout date
+            checkouts Artifactory file only when last modified date(last-modified header returned when connecting to a URL) changes from last checkout date
         </li>
         <li>
             supports pooling using the same above logic
@@ -15,7 +15,7 @@
             supports extraction of zip,tar,gz,jar,war,ear files
         </li>
         <li>
-            detects type of archive file based on file name (i.e URL must end with zip,tar,tar.gz,jar,war,ear)
+            detects type of Artifactory file based on file name (i.e URL must end with zip,tar,tar.gz,jar,war,ear)
         </li>
         <li>
             supports basic authentication

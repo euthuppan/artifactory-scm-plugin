@@ -1,9 +1,8 @@
-ArchiveFilesSCM plugin for Jenkins checkouts using remote archive files and extracts to a Jenkins job workspace
-
-### This Plugin has been resurrected from the grave to work with pipelines and Jenkins in 2021!
-
+ArtifactorySCM plugin for Jenkins checkouts using remote artifactory endpoints and it's API to extract pipeline source code to a Jenkins job workspace
 
 # Main Changes:
+ - Specifying the latestVersionTag will pick an artifact if it's prefixed with that tag. 
+   - ex: "main" will pick the latest artifact labeled "main-version.zip"
  - Removed deprecated methods and added new ones in favor of what Jenkins requires in 2021
  - Utilizes the credentials plugin for authentication
  - Works with pipeline jobs for selecting source code for starting one
@@ -20,7 +19,7 @@ ArchiveFilesSCM plugin for Jenkins checkouts using remote archive files and extr
 stage('Checking out different repo') {
     steps {
         dir('subdir') {
-            checkout([$class: 'ArchiveFilesSCM', url: 'https://someurl.com/repo.zip', clearWorkspace: true, credentialsId: 'cred_id'])
+            checkout([$class: 'ArtifactorySCM', url: 'https://artifactory-endpoint.com/repofolder', clearWorkspace: true, credentialsId: 'cred_id'])
         }
     }
 }
@@ -50,11 +49,10 @@ Plugin
 
 - supports basic authentication
 
-- supports connection through proxy
-
-- supports running on slave
-
 - supports http:// and file:// protocols e.g - URL can be
 http://www.apache.org/dyn/closer.cgi/maven/binaries/apache-maven-3.0.4-bin.tar.gz
 
 Note: If the type is unknown the plugin will simply copy the file to workspace
+
+TODO: 
+- supports running on slave

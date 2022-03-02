@@ -13,7 +13,6 @@ import com.cloudbees.plugins.credentials.common.UsernamePasswordCredentials;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.ProxyConfiguration;
 import hudson.model.*;
 import hudson.scm.ChangeLogParser;
 import hudson.scm.NullChangeLogParser;
@@ -45,7 +44,7 @@ import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 
-import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.jvnet.robust_http_client.RetryableHttpStream;
 import org.kohsuke.stapler.*;
@@ -55,19 +54,19 @@ import org.kohsuke.stapler.export.Exported;
 //import sun.net.www.protocol.http.AuthCacheValue;
 
 /**
- * ArchiveFilesSCM plugin for Jenkins checkouts archive files and extracts to
+ * ArtifactorySCM plugin for Jenkins checkouts archive files from Artifactory and extracts to
  * Jenkins job workspace
  * 
  * Plugin
  * 
- * - checkouts archive file only when last modified date(last-modified header
+ * - checkouts artifactory file only when last modified date(last-modified header
  * returned when connecting to a URL) changes from last checkout date
  * 
  * - supports pooling using the same above logic
  * 
  * - supports extraction of zip,tar,gz,jar,war,ear files
  * 
- * - detects type of archive file based on file name (i.e URL must end with
+ * - detects type of artifactory file based on file name (i.e URL must end with
  * zip,tar,tar.gz,jar,war,ear)
  * 
  * - supports basic authentication
@@ -86,10 +85,11 @@ import org.kohsuke.stapler.export.Exported;
  * workspace
  */
 @SuppressWarnings("restriction")
-public class ArchiveFilesSCM extends SCM {
+public class ArtifactorySCM extends SCM {
 
 	/** The urls. */
 	private final List<URLTuple> urls = new ArrayList<>();
+	private String latestVersionTag;
 
 
 	private String url;
@@ -97,16 +97,18 @@ public class ArchiveFilesSCM extends SCM {
 	/** The clear workspace. */
 	private boolean clearWorkspace;
 
+	//private boolean useCache;
+
 	private String credentialsId;
 
 
 	/** The Constant LOGGER. */
-	private static final Logger LOGGER = Logger.getLogger(ArchiveFilesSCM.class
+	private static final Logger LOGGER = Logger.getLogger(ArtifactorySCM.class
 			.getName());
 
 	/**
-	 * Instantiates a new archive files scm.
-	 * 
+	 * Instantiates a new Artifactory scm.
+	 *
 	 * @param url
 	 *            the url - url
 	 * @param clear
@@ -116,10 +118,11 @@ public class ArchiveFilesSCM extends SCM {
 	 * 			  the
 	 */
 	@DataBoundConstructor
-	public ArchiveFilesSCM(String url, boolean clear, String credentialsId) {
+	public ArtifactorySCM(String url, String latestVersionTag, boolean clear, String credentialsId) {
 		this.url = url;
+		this.latestVersionTag = latestVersionTag;
 		this.credentialsId = credentialsId;
-		LOGGER.log(ALL, "ArchiveFilesSCM() Enter >>>");
+		LOGGER.log(ALL, "ArtifactorySCM() Enter >>>");
 		urls.add(new URLTuple(url, null, null));
 		/*
 		if (yourls != null) {
@@ -130,7 +133,8 @@ public class ArchiveFilesSCM extends SCM {
 		 */
 
 		this.clearWorkspace = clear;
-		LOGGER.log(ALL, "ArchiveFilesSCM() Exit >>>");
+		//this.useCache = useCache;
+		LOGGER.log(ALL, "ArtifactorySCM() Exit >>>");
 	}
 
 	/**
@@ -159,6 +163,19 @@ public class ArchiveFilesSCM extends SCM {
 		return clearWorkspace;
 	}
 
+	/*
+	@DataBoundSetter
+	public void setUseCache(boolean useCache) {
+		this.useCache = useCache;
+	}
+
+	@Exported
+	public boolean isUseCache() {
+		return useCache;
+	}
+
+	 */
+
 	@DataBoundSetter
 	public void setCredentialsId(String credentialsId) {
 		this.credentialsId = credentialsId;
@@ -167,6 +184,14 @@ public class ArchiveFilesSCM extends SCM {
 	@Exported
 	public String getCredentialsId() {
 		return credentialsId;
+	}
+
+	@DataBoundSetter
+	public void setLatestVersionTag(String latestVersionTag) { this.latestVersionTag = latestVersionTag; }
+
+	@Exported
+	public String getLatestVersionTag() {
+		return latestVersionTag;
 	}
 
 	/**
@@ -212,8 +237,6 @@ public class ArchiveFilesSCM extends SCM {
 		LastModifiedDateAction action = new LastModifiedDateAction(run);
 		/*
 		Hudson h = Hudson.getInstance(); // this code might run on slaves
-
-
 		ProxyConfiguration proxyConfiguration = h != null ? h.proxy : null;
 		String proxyUserName = null;
 		String proxyPassword = null;
@@ -224,7 +247,6 @@ public class ArchiveFilesSCM extends SCM {
 			proxyPassword = proxyConfiguration.getPassword();
 		}
 		 */
-
 
 		for (URLTuple tuple : urls) {
 			String urlString = tuple.getUrlString();
@@ -241,8 +263,11 @@ public class ArchiveFilesSCM extends SCM {
 					tuple.setAuthenticator();
 				}
 
-				URL url = new URL(urlString);
+				String latestURLString = buildLatestURL(urlString, latestVersionTag);
+				//listener.getLogger().println("Latest Version Available: " + latestURLString);
+				URL url = new URL(latestURLString);
 				connection = url.openConnection();
+
 				/*
 				if (proxyConfiguration == null) {
 					listener.getLogger().println("Proxy is not configured");
@@ -291,11 +316,18 @@ public class ArchiveFilesSCM extends SCM {
 				// Do not use cached file
 				connection.setUseCaches(false);
 
+				/*
+				// A way to get headers from the artifactory request if needed
+				String artifactVersion = connection.getHeaderField("X-Artifactory-Filename");
+				listener.getLogger().println("Artifact File Version: " + artifactVersion);
+				 */
 				// Saving last modified time stamp for later use while polling
 				// for source code change
 				action.setLastModified(urlString, connection.getLastModified());
 
 				long sourceLastUpdatedTimestamp = connection.getLastModified();
+				listener.getLogger().println("PRINTING LAST MODIFIED DATE:");
+				listener.getLogger().println(sourceLastUpdatedTimestamp);
 
 				File f = new File(url.getPath());
 				String fileName = f.getName();
@@ -311,7 +343,14 @@ public class ArchiveFilesSCM extends SCM {
 						&& sourceLastUpdatedTimestamp == timestamp
 								.lastModified()) {
 					listener.getLogger().println("File is up to date");
-				} else {
+
+				}
+				/*
+				else if (useCache) {
+					listener.getLogger().println("Cache Option selected. Will not download source code from remote URL. Will attempt to run source locally");
+				}
+				*/
+				else {
 					// for HTTP downloads, enable automatic retry for added
 					// resilience
 					is = new CountingInputStream(url.getProtocol().equals(
@@ -344,7 +383,7 @@ public class ArchiveFilesSCM extends SCM {
 						workspace.list().get(0).moveAllChildrenTo(workspace);
 
 					listener.getLogger().println(
-							"Downloaded " + urlString + " to "
+							"Downloaded " + latestURLString + " to "
 									+ workspace.toURI());
 					// update the last modified timestamp of timestamp file
 					timestamp.touch(sourceLastUpdatedTimestamp);
@@ -372,7 +411,6 @@ public class ArchiveFilesSCM extends SCM {
 						+ (System.currentTimeMillis() - start));
 
 		LOGGER.log(ALL, " checkout() Exit >>>");
-		return;
 	}
 
 	UsernamePasswordCredentials initPasswordCredentials(Run<?, ?> run) {
@@ -481,17 +519,17 @@ public class ArchiveFilesSCM extends SCM {
 	}
 
 	/**
-	 * The Class ArchiveFilesSCMDescriptorImpl.
+	 * The Class ArtifactorySCMDescriptorImpl.
 	 */
 	@Extension
-	public static final class ArchiveFilesSCMDescriptorImpl extends
-			SCMDescriptor<ArchiveFilesSCM> {
+	public static final class ArtifactorySCMDescriptorImpl extends
+			SCMDescriptor<ArtifactorySCM> {
 
 		/**
-		 * Instantiates a new archive files scm descriptor impl.
+		 * Instantiates a new artifactory scm descriptor impl.
 		 */
-		public ArchiveFilesSCMDescriptorImpl() {
-			super(ArchiveFilesSCM.class, null);
+		public ArtifactorySCMDescriptorImpl() {
+			super(ArtifactorySCM.class, null);
 			load();
 		}
 
@@ -501,7 +539,7 @@ public class ArchiveFilesSCM extends SCM {
 		 * @see hudson.model.Descriptor#getDisplayName()
 		 */
 		public String getDisplayName() {
-			return "Archive Files SCM";
+			return "Artifactory SCM";
 		}
 
 		// This NEEDS to be overriden! Not having this causes the scm option to not show up in the configuration page!
@@ -563,6 +601,40 @@ public class ArchiveFilesSCM extends SCM {
 		}
 
 
+	}
+
+	/**
+	 * Function to build the URL using the latestVersion Tag
+	 * @return
+	 * @param urlString
+	 * @param latestVersionTag
+	 */
+
+	public String buildLatestURL(String urlString, String latestVersionTag) throws IOException {
+		// URL should be the folder, need to reach artifactory API to get request
+		String apiBase = "api/search/latestVersion?";
+		String noHttpsURL = urlString.replace("https://", "");
+
+		// index 0 = artifactory endpoint
+		// index 1 = artifactory
+		// index 2 = repo
+		// index 3 = team name
+		// index 4 = Repo Folder
+		String[] url = noHttpsURL.split("/");
+
+		String apiRequest = String.format("https://%s/%s/%srepos=%s&g=%s&a=%s", url[0], url[1], apiBase, url[2], url[3], url[4]);
+
+		// Add main tag to request if needed
+		if (latestVersionTag.length() > 0) {
+			apiRequest += String.format("&v=%s", latestVersionTag);
+		}
+
+		URL apiURL = new URL(apiRequest);
+		URLConnection urlConnection = apiURL.openConnection();
+		InputStream inputStream = urlConnection.getInputStream();
+		String tag = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+		String latestURL = String.format("https://%s/%s/%s/%s/%s/%s-%s.zip", url[0], url[1], url[2], url[3], url[4], url[4], tag);
+		return latestURL;
 	}
 
 	/**
@@ -657,5 +729,4 @@ public class ArchiveFilesSCM extends SCM {
 			Authenticator.setDefault(new SecuredResourceAuthenticator());
 		}
 	}
-
 }
