@@ -264,7 +264,7 @@ public class ArtifactorySCM extends SCM {
 				}
 
 				String latestURLString = buildLatestURL(urlString, latestVersionTag);
-				//listener.getLogger().println("Latest Version Available: " + latestURLString);
+				listener.getLogger().println("Latest Version Available: " + latestURLString);
 				URL url = new URL(latestURLString);
 				connection = url.openConnection();
 
@@ -324,10 +324,7 @@ public class ArtifactorySCM extends SCM {
 				// Saving last modified time stamp for later use while polling
 				// for source code change
 				action.setLastModified(urlString, connection.getLastModified());
-
 				long sourceLastUpdatedTimestamp = connection.getLastModified();
-				listener.getLogger().println("PRINTING LAST MODIFIED DATE:");
-				listener.getLogger().println(sourceLastUpdatedTimestamp);
 
 				File f = new File(url.getPath());
 				String fileName = f.getName();
