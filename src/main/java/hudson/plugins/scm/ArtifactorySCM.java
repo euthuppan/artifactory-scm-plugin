@@ -348,6 +348,11 @@ public class ArtifactorySCM extends SCM {
 				}
 				*/
 				else {
+					// If clear workspace is left unchecked, a new artifact will not overwrite old files
+					// With a new last modified data aka a new artifact found, we should delete the workspace
+					workspace.deleteContents();
+					listener.getLogger().println("Clearing workspace for new files");
+
 					// for HTTP downloads, enable automatic retry for added
 					// resilience
 					is = new CountingInputStream(url.getProtocol().equals(
