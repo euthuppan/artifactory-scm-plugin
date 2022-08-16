@@ -635,6 +635,13 @@ public class ArtifactorySCM extends SCM {
 		URLConnection urlConnection = apiURL.openConnection();
 		InputStream inputStream = urlConnection.getInputStream();
 		String tag = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+
+		// Remove these potential strings from the tag
+		String[] removeables = {".zip", ".smf", ".sig"};
+		for (int i = 0; i < removeables.length; i++) {
+			tag = tag.replace(removeables[i], "");
+		}
+
 		String latestURL = String.format("https://%s/%s/%s/%s/%s/%s-%s.zip", url[0], url[1], url[2], url[3], url[4], url[4], tag);
 		return latestURL;
 	}
