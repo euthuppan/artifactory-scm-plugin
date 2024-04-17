@@ -10,6 +10,7 @@ import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 
 import com.cloudbees.plugins.credentials.common.UsernamePasswordCredentials;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -24,16 +25,17 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.Authenticator;
 import java.net.PasswordAuthentication;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.HttpURLConnection;
+
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -609,40 +611,63 @@ public class ArtifactorySCM extends SCM {
 	 * Function to build the URL using the latestVersion Tag
 	 * @return
 	 * @param urlString
-	 * @param latestVersionTag
+	 * @param latestVersionTag represents the git branch of the code the artifact represents
 	 */
+
 
 	public String buildLatestURL(String urlString, String latestVersionTag) throws IOException {
 		// URL should be the folder, need to reach artifactory API to get request
-		String apiBase = "api/search/latestVersion?";
+		String apiBase = "api/search/aql";
 		String noHttpsURL = urlString.replace("https://", "");
+		String branch = "";
 
 		// index 0 = artifactory endpoint
 		// index 1 = artifactory
 		// index 2 = repo
-		// index 3 = team name
-		// index 4 = Repo Folder
+		// index 3 = repo folder, unless using legacy method. should be last index of split url
 		String[] url = noHttpsURL.split("/");
+		String repoFolder = url[url.length-1];
 
-		String apiRequest = String.format("https://%s/%s/%srepos=%s&g=%s&a=%s", url[0], url[1], apiBase, url[2], url[3], url[4]);
+		String apiRequest = String.format("https://%s/%s/%s", url[0], url[1], apiBase);
 
 		// Add main tag to request if needed
 		if (latestVersionTag.length() > 0) {
-			apiRequest += String.format("&v=%s", latestVersionTag);
+			branch = latestVersionTag + '*';
 		}
 
-		URL apiURL = new URL(apiRequest);
-		URLConnection urlConnection = apiURL.openConnection();
-		InputStream inputStream = urlConnection.getInputStream();
-		String tag = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+		String payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-*%s\" } }).sort({\"$desc\":[\"modified\"]}).limit(1)", url[2], repoFolder, branch);
+
+		URL full_url = new URL(apiRequest);
+		HttpURLConnection connection = (HttpURLConnection) full_url.openConnection();
+
+		// Set the appropriate HTTP method and headers for a POST request
+		connection.setRequestMethod("POST");
+		connection.setRequestProperty("Content-Type", "text/plain");
+		connection.setDoOutput(true);
+
+		// Write the payload to the connection's output stream
+		try (OutputStream outputStream = connection.getOutputStream()) {
+			byte[] input = payload.getBytes(StandardCharsets.UTF_8);
+			outputStream.write(input);
+		}
+
+		// Read the response of the API call and grab repo, path, and name
+		// Using Jackson parser to create JSON Map object for "easy" object grabbing
+		InputStream inputStream = connection.getInputStream();
+		ObjectMapper mapper = new ObjectMapper();
+		Map<String, Object> jsonMap = mapper.readValue(inputStream, Map.class);
+		List<Map<String, Object>> results = (List<Map<String, Object>>) jsonMap.get("results");
+		Map<String, Object> result = results.get(0);
+		String repo = (String) result.get("repo");
+		String path = (String) result.get("path");
+		String name = (String) result.get("name");
 
 		// Remove these potential strings from the tag
-		String[] removeables = {".zip", ".smf", ".sig"};
+		String[] removeables = {".zip",  ".signedmanifest", ".smf", ".sig"};
 		for (int i = 0; i < removeables.length; i++) {
-			tag = tag.replace(removeables[i], "");
+			name = name.replace(removeables[i], "");
 		}
-
-		String latestURL = String.format("https://%s/%s/%s/%s/%s/%s-%s.zip", url[0], url[1], url[2], url[3], url[4], url[4], tag);
+		String latestURL = String.format("https://%s/%s/%s/%s/%s.zip", url[0], url[1], repo, path, name);
 		return latestURL;
 	}
 
