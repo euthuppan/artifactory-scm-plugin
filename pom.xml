@@ -11,7 +11,7 @@
   <groupId>io.jenkins.plugins</groupId>
   <artifactId>ArtifactorySCM</artifactId>
   <name>Jenkins Artifactory SCM</name>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
   <packaging>hpi</packaging>
 
   <properties>
@@ -53,13 +53,6 @@
       <artifactId>credentials</artifactId>
       <version>1337.v60b_d7b_c7b_c9f</version>
     </dependency>
-    <!--
-    <dependency>
-      <groupId>com.cloudbees.jenkins.plugins</groupId>
-      <artifactId>cloudbees-credentials</artifactId>
-      <version>3.3</version>
-    </dependency>
-    -->
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>

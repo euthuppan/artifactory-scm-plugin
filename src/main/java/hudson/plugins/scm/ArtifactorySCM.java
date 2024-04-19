@@ -635,7 +635,7 @@ public class ArtifactorySCM extends SCM {
 			branch = latestVersionTag + '*';
 		}
 
-		String payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-*%s\" } }).sort({\"$desc\":[\"modified\"]}).limit(1)", url[2], repoFolder, branch);
+		String payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-%s*\" } }).sort({\"$desc\":[\"modified\"]}).limit(1)", url[2], repoFolder, branch);
 
 		URL full_url = new URL(apiRequest);
 		HttpURLConnection connection = (HttpURLConnection) full_url.openConnection();
