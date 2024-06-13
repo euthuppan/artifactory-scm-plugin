@@ -26,16 +26,13 @@ import hudson.util.FormValidation;
 
 
 import java.io.*;
-import java.net.Authenticator;
-import java.net.PasswordAuthentication;
-import java.net.URL;
-import java.net.URLConnection;
-import java.net.HttpURLConnection;
+import java.net.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -265,7 +262,7 @@ public class ArtifactorySCM extends SCM {
 					tuple.setAuthenticator();
 				}
 
-				String latestURLString = buildLatestURL(urlString, latestVersionTag);
+				String latestURLString = buildLatestURL(urlString, latestVersionTag, listener);
 				listener.getLogger().println("Latest Version Available: " + latestURLString);
 				URL url = new URL(latestURLString);
 				connection = url.openConnection();
@@ -615,12 +612,11 @@ public class ArtifactorySCM extends SCM {
 	 */
 
 
-	public String buildLatestURL(String urlString, String latestVersionTag) throws IOException {
+	public String buildLatestURL(String urlString, String latestVersionTag, TaskListener listener) throws IOException {
 		// URL should be the folder, need to reach artifactory API to get request
 		String apiBase = "api/search/aql";
 		String noHttpsURL = urlString.replace("https://", "");
 		String branch = "";
-
 		// index 0 = artifactory endpoint
 		// index 1 = artifactory
 		// index 2 = repo
@@ -629,13 +625,17 @@ public class ArtifactorySCM extends SCM {
 		String repoFolder = url[url.length-1];
 
 		String apiRequest = String.format("https://%s/%s/%s", url[0], url[1], apiBase);
+		String payload = "";
 
-		// Add main tag to request if needed
-		if (latestVersionTag.length() > 0) {
-			branch = latestVersionTag + '*';
+		// Supports legacy way of grabbing without version tag
+		if (latestVersionTag.isEmpty()) {
+			payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-%s*.zip\" } }).sort({\"$desc\":[\"modified\"]}).limit(1)", url[2], repoFolder, branch);
 		}
-
-		String payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-%s*\" } }).sort({\"$desc\":[\"modified\"]}).limit(1)", url[2], repoFolder, branch);
+		// Gets rid of sort because we can sort ourselves with the build number
+		else if (latestVersionTag.length() > 0) {
+			branch = latestVersionTag + '*';
+			payload = String.format("items.find( { \"repo\":\"%s\", \"name\":{\"$match\" : \"%s-%s.zip\" } })", url[2], repoFolder, branch);
+		}
 
 		URL full_url = new URL(apiRequest);
 		HttpURLConnection connection = (HttpURLConnection) full_url.openConnection();
@@ -653,22 +653,44 @@ public class ArtifactorySCM extends SCM {
 
 		// Read the response of the API call and grab repo, path, and name
 		// Using Jackson parser to create JSON Map object for "easy" object grabbing
-		InputStream inputStream = connection.getInputStream();
+        InputStream inputStream = connection.getInputStream();
 		ObjectMapper mapper = new ObjectMapper();
 		Map<String, Object> jsonMap = mapper.readValue(inputStream, Map.class);
-		List<Map<String, Object>> results = (List<Map<String, Object>>) jsonMap.get("results");
-		Map<String, Object> result = results.get(0);
-		String repo = (String) result.get("repo");
-		String path = (String) result.get("path");
-		String name = (String) result.get("name");
+        List<Map<String, Object>> results = (List<Map<String, Object>>) jsonMap.get("results");
+		Map<String, Object> finalResult = null;
 
+		// Sort the results by the number at the end of the "name" string
+		if (latestVersionTag.length() > 0) {
+			List<Map<String, Object>> sortedResults = results.stream()
+					.sorted(Comparator.comparingInt(result -> extractNumberFromName((String) result.get("name"))))
+					.collect(Collectors.toList());
+			finalResult = sortedResults.get(sortedResults.size()-1);
+		}
+		// Legacy method, just get first from AQL query's list
+		else {
+			finalResult = results.get(0);
+		}
+
+		String repo = (String) finalResult.get("repo");
+		String path = (String) finalResult.get("path");
+		String name = (String) finalResult.get("name");
+
+		/*
 		// Remove these potential strings from the tag
 		String[] removeables = {".zip",  ".signedmanifest", ".smf", ".sig"};
 		for (int i = 0; i < removeables.length; i++) {
 			name = name.replace(removeables[i], "");
 		}
-		String latestURL = String.format("https://%s/%s/%s/%s/%s.zip", url[0], url[1], repo, path, name);
+		 */
+		String latestURL = String.format("https://%s/%s/%s/%s/%s", url[0], url[1], repo, path, name);
 		return latestURL;
+	}
+
+	// Used to help sort the list of artifactory results by build number
+	private static int extractNumberFromName(String name) {
+		String[] parts = name.split("-");
+		String numberPart = parts[parts.length - 1].replace(".zip", "");
+		return Integer.parseInt(numberPart);
 	}
 
 	/**
